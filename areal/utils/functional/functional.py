@@ -557,6 +557,40 @@ def ppo_actor_loss_fn(
     return pg_loss, stat
 
 
+def cispo_loss_fn(
+    logprobs: torch.Tensor,
+    proximal_logprobs: torch.Tensor,
+    advantages: torch.Tensor,
+    epsilon_high: float,
+    loss_mask: torch.Tensor,
+) -> tuple[torch.Tensor, dict]:
+    """CISPO (Clipped IS-weight Policy Optimization) loss from MiniMax-M1.
+
+    Instead of clipping the policy ratio like PPO/GRPO, CISPO clips the
+    importance sampling weight and detaches it, ensuring all tokens
+    (including rare reflective tokens) contribute gradients.
+
+    Loss = -clamp(exp(logp_new - logp_prox), max=epsilon_high).detach() * adv * logp_new
+    """
+    loss_mask_count = loss_mask.count_nonzero() or 1
+
+    log_ratio = torch.where(loss_mask, logprobs - proximal_logprobs, 0.0)
+    is_weight = torch.exp(log_ratio)
+    clamped_weight = torch.clamp(is_weight, max=epsilon_high).detach()
+
+    pg_loss = -clamped_weight * advantages * logprobs
+    pg_loss = torch.where(loss_mask, pg_loss, 0).sum() / loss_mask_count
+
+    stat = dict(
+        loss=(-clamped_weight * advantages * logprobs).detach(),
+        importance_weight=is_weight.detach(),
+        approx_kl=(logprobs - proximal_logprobs).detach(),
+        clip_mask=torch.zeros_like(loss_mask),
+        dual_clip_mask=torch.zeros_like(loss_mask),
+    )
+    return pg_loss, stat
+
+
 def sapo_loss_fn(
     logprobs: torch.Tensor,
     old_logprobs: torch.Tensor,
