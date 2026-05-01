@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ============================================================
 # Plot results from AReaL experiment logs
-# Usage: python3 plot_results.py [username]
-# Saves plots to: slurm_logs/plots/
+# Usage: python3 plot_results.py [username] [log_subdir]
+# Saves plots to: <log_subdir>/plots/  (default log_subdir: slurm_logs)
 # ============================================================
 
 import re
@@ -12,7 +12,8 @@ import os
 import json
 
 username = sys.argv[1] if len(sys.argv) > 1 else "sgnanaku"
-log_dir = f"/scratch/zt1/project/zaoxing-prj/user/{username}/slurm_logs"
+log_subdir = sys.argv[2] if len(sys.argv) > 2 else "slurm_logs"
+log_dir = f"/scratch/zt1/project/zaoxing-prj/user/{username}/{log_subdir}"
 plot_dir = os.path.join(log_dir, "plots")
 os.makedirs(plot_dir, exist_ok=True)
 
@@ -36,6 +37,7 @@ COLORS = {
     'grpo': '#2196F3',   # blue
     'cispo': '#FF5722',  # orange-red
     'sapo': '#4CAF50',   # green
+    'm2po': '#9C27B0',   # purple
 }
 LINESTYLES = {
     0: '-',
@@ -43,7 +45,7 @@ LINESTYLES = {
     4: ':',
 }
 ETA_LABELS = {0: 'η=0 (sync)', 2: 'η=2', 4: 'η=4'}
-ALGO_LABELS = {'grpo': 'GRPO', 'cispo': 'CISPO', 'sapo': 'SAPO'}
+ALGO_LABELS = {'grpo': 'GRPO', 'cispo': 'CISPO', 'sapo': 'SAPO', 'm2po': 'M2PO'}
 
 EXPERIMENTS = {
     'grpo_eta0':  ('grpo', 0),
@@ -55,6 +57,9 @@ EXPERIMENTS = {
     'sapo_eta0':  ('sapo', 0),
     'sapo_eta2':  ('sapo', 2),
     'sapo_eta4':  ('sapo', 4),
+    'm2po_eta0':  ('m2po', 0),
+    'm2po_eta2':  ('m2po', 2),
+    'm2po_eta4':  ('m2po', 4),
 }
 
 # ============================================================
@@ -95,10 +100,10 @@ for exp_name, (algo, eta) in EXPERIMENTS.items():
 # ============================================================
 # Plot 1: Reward curves per algorithm (3 subplots)
 # ============================================================
-fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
-fig.suptitle('Reward Curves by Algorithm (GRPO vs CISPO vs SAPO)', fontsize=14, fontweight='bold')
+fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
+fig.suptitle('Reward Curves by Algorithm (GRPO vs CISPO vs SAPO vs M2PO)', fontsize=14, fontweight='bold')
 
-for ax, algo in zip(axes, ['grpo', 'cispo', 'sapo']):
+for ax, algo in zip(axes, ['grpo', 'cispo', 'sapo', 'm2po']):
     for eta in [0, 2, 4]:
         exp = f"{algo}_eta{eta}"
         if exp in data and data[exp]['rewards']:
@@ -110,7 +115,7 @@ for ax, algo in zip(axes, ['grpo', 'cispo', 'sapo']):
                     label=ETA_LABELS[eta])
     ax.set_title(ALGO_LABELS[algo], fontsize=12, fontweight='bold')
     ax.set_xlabel('Training Step')
-    ax.set_ylabel('Task Reward' if algo == 'grpo' else '')
+    ax.set_ylabel('Task Reward' if ax is axes[0] else '')
     ax.legend()
     ax.grid(True, alpha=0.3)
     ax.set_ylim(0.5, 1.0)
@@ -128,7 +133,7 @@ fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
 fig.suptitle('Reward Curves by Staleness Level (η=0, 2, 4)', fontsize=14, fontweight='bold')
 
 for ax, eta in zip(axes, [0, 2, 4]):
-    for algo in ['grpo', 'cispo', 'sapo']:
+    for algo in ['grpo', 'cispo', 'sapo', 'm2po']:
         exp = f"{algo}_eta{eta}"
         if exp in data and data[exp]['rewards']:
             d = data[exp]
@@ -154,11 +159,11 @@ plt.close()
 # ============================================================
 fig, ax = plt.subplots(figsize=(8, 6))
 
-algos = ['GRPO', 'CISPO', 'SAPO']
+algos = ['GRPO', 'CISPO', 'SAPO', 'M2PO']
 etas = ['η=0', 'η=2', 'η=4']
-matrix = np.zeros((3, 3))
+matrix = np.zeros((4, 3))
 
-for i, algo in enumerate(['grpo', 'cispo', 'sapo']):
+for i, algo in enumerate(['grpo', 'cispo', 'sapo', 'm2po']):
     for j, eta in enumerate([0, 2, 4]):
         exp = f"{algo}_eta{eta}"
         if exp in data and data[exp]['rewards']:
@@ -166,14 +171,14 @@ for i, algo in enumerate(['grpo', 'cispo', 'sapo']):
 
 im = ax.imshow(matrix, cmap='RdYlGn', vmin=0.7, vmax=0.95)
 ax.set_xticks(range(3))
-ax.set_yticks(range(3))
+ax.set_yticks(range(4))
 ax.set_xticklabels(etas, fontsize=12)
 ax.set_yticklabels(algos, fontsize=12)
 ax.set_xlabel('Staleness (η)', fontsize=12)
 ax.set_ylabel('Algorithm', fontsize=12)
 ax.set_title('Final Reward Heatmap', fontsize=14, fontweight='bold')
 
-for i in range(3):
+for i in range(4):
     for j in range(3):
         val = matrix[i, j]
         ax.text(j, i, f'{val:.4f}', ha='center', va='center',
@@ -192,7 +197,7 @@ plt.close()
 # ============================================================
 fig, ax = plt.subplots(figsize=(8, 6))
 
-for algo in ['grpo', 'cispo', 'sapo']:
+for algo in ['grpo', 'cispo', 'sapo', 'm2po']:
     rewards = []
     valid_etas = []
     for eta in [0, 2, 4]:

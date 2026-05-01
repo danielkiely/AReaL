@@ -1,15 +1,19 @@
 #!/bin/bash
 # ============================================================
-# Submit all 9 experiments to Slurm
-# Run this from the login node: bash submit_all.sh
+# AReaL Experiment Matrix: GRPO vs CISPO vs SAPO x eta={0,2,4}
+# 10 epochs with test set evaluation every 20 steps
+# Usage: bash submit_all_v2.sh <username>
 # ============================================================
 
-SCRATCH=/scratch/zt1/project/zaoxing-prj/user/sgnanaku
-AREAL=$SCRATCH/AReaL
-LOGS=$SCRATCH/slurm_logs
+USER_NAME=${1:-sgnanaku}
+SCRATCH=/scratch/zt1/project/zaoxing-prj/user/$USER_NAME
+LOGS=$SCRATCH/slurm_logs_v2
 mkdir -p $LOGS
 
-# Function to submit one job
+echo "Submitting jobs for user: $USER_NAME"
+echo "Logs: $LOGS"
+echo ""
+
 submit_job() {
     local EXP_NAME=$1
     local ALGO_FLAGS=$2
@@ -23,11 +27,11 @@ submit_job() {
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gpus=a100:2
-#SBATCH --time=1:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=${LOGS}/${EXP_NAME}_%j.out
 #SBATCH --error=${LOGS}/${EXP_NAME}_%j.err
 
-SCRATCH=/scratch/zt1/project/zaoxing-prj/user/sgnanaku
+SCRATCH=/scratch/zt1/project/zaoxing-prj/user/${USER_NAME}
 MODEL_PATH=\$SCRATCH/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306
 
 module load apptainer
@@ -38,7 +42,6 @@ apptainer exec --nv --writable-tmpfs \\
   --env "HF_DATASETS_OFFLINE=1" \\
   --env "HF_HUB_OFFLINE=1" \\
   --env "HF_HOME=\$SCRATCH/.cache/huggingface" \\
-  --env "PYTHONSTARTUP=/tmp/te_stub.py" \\
   \$SCRATCH/areal.sif /bin/bash -c "
     echo \"import sys; sys.modules['transformer_engine'] = type(sys)('transformer_engine')\" > /tmp/te_stub.py
     export LD_LIBRARY_PATH=/.singularity.d/libs:\\\$LD_LIBRARY_PATH
@@ -57,9 +60,10 @@ apptainer exec --nv --writable-tmpfs \\
         cluster.n_gpus_per_node=2 \\\\
         actor.path=\$MODEL_PATH \\\\
         gconfig.max_new_tokens=512 \\\\
+        total_train_epochs=10 \\\\
         train_dataset.batch_size=64 \\\\
-        total_train_epochs=1 \\\\
         rollout.max_head_offpolicyness=${ETA} \\\\
+        evaluator.freq_steps=20 \\\\
         ${ALGO_FLAGS}
   "
 EOF
@@ -67,19 +71,19 @@ EOF
 }
 
 # GRPO (baseline)
-submit_job "grpo_eta0" "" "0"
-submit_job "grpo_eta2" "" "2"
-submit_job "grpo_eta4" "" "4"
+submit_job "grpo_eta0" "+eps_clip=1e9" "0"
+submit_job "grpo_eta2" "+eps_clip=1e9" "2"
+submit_job "grpo_eta4" "+eps_clip=1e9" "4"
 
 # CISPO
-submit_job "cispo_eta0" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1.2" "0"
-submit_job "cispo_eta2" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1.2" "2"
-submit_job "cispo_eta4" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1.2" "4"
+submit_job "cispo_eta0" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1e9" "0"
+submit_job "cispo_eta2" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1e9" "2"
+submit_job "cispo_eta4" "+actor.use_cispo_loss=true +actor.cispo_epsilon_high=1e9" "4"
 
 # SAPO
-submit_job "sapo_eta0" "+actor.use_sapo_loss=true +actor.use_decoupled_loss=false" "0"
-submit_job "sapo_eta2" "+actor.use_sapo_loss=true +actor.use_decoupled_loss=false" "2"
-submit_job "sapo_eta4" "+actor.use_sapo_loss=true +actor.use_decoupled_loss=false" "4"
+submit_job "sapo_eta0" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false ++tau_pos=0" "0"
+submit_job "sapo_eta2" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false ++tau_pos=0" "2"
+submit_job "sapo_eta4" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false ++tau_pos=0" "4"
 
 # M2PO
 submit_job "m2po_eta0" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "0"
@@ -87,5 +91,6 @@ submit_job "m2po_eta2" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "2"
 submit_job "m2po_eta4" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "4"
 
 echo ""
-echo "All 9 jobs submitted! Monitor with: squeue -u sgnanaku"
-echo "Logs at: $LOGS"
+echo "All 9 jobs submitted! Each runs for 10 epochs (~10 hours)"
+echo "Monitor with: squeue -u ${USER_NAME}"
+echo "Logs at: ${LOGS}"
