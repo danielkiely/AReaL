@@ -85,6 +85,11 @@ submit_job "sapo_eta0" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=fal
 submit_job "sapo_eta2" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false" "2"
 submit_job "sapo_eta4" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false" "4"
 
+# M2PO
+submit_job "m2po_eta0" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "0"
+submit_job "m2po_eta2" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "2"
+submit_job "m2po_eta4" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "4"
+
 echo ""
 echo "All 9 jobs submitted! Each runs for 10 epochs (~10 hours)"
 echo "Monitor with: squeue -u ${USER_NAME}"

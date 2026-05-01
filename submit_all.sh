@@ -58,7 +58,7 @@ apptainer exec --nv --writable-tmpfs \\
         actor.path=\$MODEL_PATH \\\\
         gconfig.max_new_tokens=512 \\\\
         train_dataset.batch_size=64 \\\\
-        total_train_epochs=1 \\\\
+        total_train_epochs=10 \\\\
         rollout.max_head_offpolicyness=${ETA} \\\\
         ${ALGO_FLAGS}
   "
