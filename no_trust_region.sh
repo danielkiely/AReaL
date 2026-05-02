@@ -38,13 +38,11 @@ module load apptainer
 
 apptainer exec --nv --writable-tmpfs \\
   --bind \$SCRATCH:\$SCRATCH \\
-  --env "LD_LIBRARY_PATH=/.singularity.d/libs:/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/cuda-12.9/targets/x86_64-linux/lib" \\
   --env "HF_DATASETS_OFFLINE=1" \\
   --env "HF_HUB_OFFLINE=1" \\
   --env "HF_HOME=\$SCRATCH/.cache/huggingface" \\
-  \$SCRATCH/areal.sif /bin/bash -c "
+  \$SCRATCH/AReaL/areal.sif /bin/bash -c "
     echo \"import sys; sys.modules['transformer_engine'] = type(sys)('transformer_engine')\" > /tmp/te_stub.py
-    export LD_LIBRARY_PATH=/.singularity.d/libs:\\\$LD_LIBRARY_PATH
     source /AReaL/.venv/bin/activate
     cd \$SCRATCH/AReaL
     uv pip install -e . --no-deps -q
@@ -61,7 +59,7 @@ apptainer exec --nv --writable-tmpfs \\
         actor.path=\$MODEL_PATH \\\\
         gconfig.max_new_tokens=512 \\\\
         total_train_epochs=10 \\\\
-        train_dataset.batch_size=64 \\\\
+        train_dataset.batch_size=32 \\\\
         rollout.max_head_offpolicyness=${ETA} \\\\
         evaluator.freq_steps=20 \\\\
         ${ALGO_FLAGS}
@@ -86,9 +84,9 @@ submit_job "sapo_eta2" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=fal
 submit_job "sapo_eta4" "+actor.use_sapo_loss=true ++actor.use_decoupled_loss=false ++tau_pos=0" "4"
 
 # M2PO
-submit_job "m2po_eta0" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "0"
-submit_job "m2po_eta2" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "2"
-submit_job "m2po_eta4" "+actor.use_m2po_loss=true ++actor.m2_threshold=0.04" "4"
+submit_job "m2po_eta0" "++actor.m2_threshold=0.04" "0"
+submit_job "m2po_eta2" "++actor.m2_threshold=0.04" "2"
+submit_job "m2po_eta4" "++actor.m2_threshold=0.04" "4"
 
 echo ""
 echo "All 9 jobs submitted! Each runs for 10 epochs (~10 hours)"

@@ -204,3 +204,6 @@ outputs/
 sympy/
 !/docs/figures/*
 *.whl
+
+# Apptainer
+areal.sif
