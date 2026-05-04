@@ -79,11 +79,24 @@ def parse_log(log_file):
     rewards = [float(x) for x in re.findall(r'task_reward/avg\s*│\s*([\d.e+\-]+)', content)]
     grad_norms = [float(x) for x in re.findall(r'update/grad_norm\s*│\s*([\d.e+\-]+)', content)]
     entropy = [float(x) for x in re.findall(r'update/entropy/avg\s*│\s*([\d.e+\-]+)', content)]
+
+    # Eval reward appears every ~20 train steps inside one of the per-step tables.
+    # Align each eval value to the training step it was logged in by counting
+    # how many `task_reward/avg` markers precede the eval's position in the file.
+    train_positions = [m.start() for m in re.finditer(r'task_reward/avg', content)]
+    eval_rewards, eval_steps = [], []
+    for em in re.finditer(r'eval-rollout/reward\s*│\s*([\d.e+\-]+)', content):
+        step = sum(1 for tp in train_positions if tp <= em.start())
+        eval_rewards.append(float(em.group(1)))
+        eval_steps.append(step)
+
     return {
         'rewards': rewards,
         'grad_norms': grad_norms,
         'entropy': entropy,
         'steps': list(range(1, len(rewards) + 1)),
+        'eval_rewards': eval_rewards,
+        'eval_steps': eval_steps,
     }
 
 data = {}
@@ -93,7 +106,8 @@ for exp_name, (algo, eta) in EXPERIMENTS.items():
         data[exp_name] = parse_log(log_file)
         data[exp_name]['algo'] = algo
         data[exp_name]['eta'] = eta
-        print(f"Loaded {exp_name}: {len(data[exp_name]['rewards'])} steps")
+        print(f"Loaded {exp_name}: {len(data[exp_name]['rewards'])} steps, "
+              f"{len(data[exp_name]['eval_rewards'])} evals")
     else:
         print(f"Missing: {exp_name}")
 
@@ -152,6 +166,67 @@ plt.tight_layout()
 path2 = os.path.join(plot_dir, 'reward_curves_by_eta.png')
 plt.savefig(path2, dpi=150, bbox_inches='tight')
 print(f"Saved: {path2}")
+plt.close()
+
+# ============================================================
+# Plot 2b: Eval reward curves per algorithm (4 subplots)
+# ============================================================
+fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
+fig.suptitle('Eval Reward Curves by Algorithm (GRPO vs CISPO vs SAPO vs M2PO)', fontsize=14, fontweight='bold')
+
+for ax, algo in zip(axes, ['grpo', 'cispo', 'sapo', 'm2po']):
+    for eta in [0, 2, 4]:
+        exp = f"{algo}_eta{eta}"
+        if exp in data and data[exp].get('eval_rewards'):
+            d = data[exp]
+            ax.plot(d['eval_steps'], d['eval_rewards'],
+                    color=COLORS[algo],
+                    linestyle=LINESTYLES[eta],
+                    linewidth=2,
+                    marker='o',
+                    markersize=4,
+                    label=ETA_LABELS[eta])
+    ax.set_title(ALGO_LABELS[algo], fontsize=12, fontweight='bold')
+    ax.set_xlabel('Training Step')
+    ax.set_ylabel('Eval Reward' if ax is axes[0] else '')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(0.0, 1.0)
+
+plt.tight_layout()
+path_eval_algo = os.path.join(plot_dir, 'eval_curves_by_algo.png')
+plt.savefig(path_eval_algo, dpi=150, bbox_inches='tight')
+print(f"Saved: {path_eval_algo}")
+plt.close()
+
+# ============================================================
+# Plot 2c: Eval reward curves per staleness level (3 subplots)
+# ============================================================
+fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
+fig.suptitle('Eval Reward Curves by Staleness Level (η=0, 2, 4)', fontsize=14, fontweight='bold')
+
+for ax, eta in zip(axes, [0, 2, 4]):
+    for algo in ['grpo', 'cispo', 'sapo', 'm2po']:
+        exp = f"{algo}_eta{eta}"
+        if exp in data and data[exp].get('eval_rewards'):
+            d = data[exp]
+            ax.plot(d['eval_steps'], d['eval_rewards'],
+                    color=COLORS[algo],
+                    linewidth=2,
+                    marker='o',
+                    markersize=4,
+                    label=ALGO_LABELS[algo])
+    ax.set_title(ETA_LABELS[eta], fontsize=12, fontweight='bold')
+    ax.set_xlabel('Training Step')
+    ax.set_ylabel('Eval Reward' if eta == 0 else '')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(0.0, 1.0)
+
+plt.tight_layout()
+path_eval_eta = os.path.join(plot_dir, 'eval_curves_by_eta.png')
+plt.savefig(path_eval_eta, dpi=150, bbox_inches='tight')
+print(f"Saved: {path_eval_eta}")
 plt.close()
 
 # ============================================================
