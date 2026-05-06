@@ -66,47 +66,24 @@ EXPERIMENTS = {
 # Parse logs
 # ============================================================
 def find_latest_log(exp_name, log_dir):
-    """Find the log file with the most training steps (handles multiple job submissions)"""
-    best_file = None
-    max_rewards = 0
-    
     for pattern in [f"{exp_name}_final_*.out", f"{exp_name}_*.out"]:
         files = glob.glob(os.path.join(log_dir, pattern))
-        for f in files:
-            try:
-                with open(f) as file:
-                    content = file.read()
-                    if "Train step" in content:
-                        reward_count = len(re.findall(r'(?:ppo_actor/)?task_reward/avg', content))
-                        if reward_count > max_rewards:
-                            max_rewards = reward_count
-                            best_file = f
-            except:
-                pass
-    
-    return best_file
+        files_with_data = [f for f in files if "Train step" in open(f).read()]
+        if files_with_data:
+            return sorted(files_with_data)[-1]
+    return None
 
 def parse_log(log_file):
     with open(log_file) as f:
         content = f.read()
-    rewards = [float(x) for x in re.findall(r'(?:ppo_actor/)?task_reward/avg\s*│\s*([\d.e+\-]+)', content)]
+    rewards = [float(x) for x in re.findall(r'task_reward/avg\s*│\s*([\d.e+\-]+)', content)]
     grad_norms = [float(x) for x in re.findall(r'update/grad_norm\s*│\s*([\d.e+\-]+)', content)]
     entropy = [float(x) for x in re.findall(r'update/entropy/avg\s*│\s*([\d.e+\-]+)', content)]
-
-    # Find last non-zero reward for crashed jobs
-    final_reward = None
-    if rewards:
-        for r in reversed(rewards):
-            if r > 0:
-                final_reward = r
-                break
-        if final_reward is None:
-            final_reward = rewards[-1]  # Use last reward if all are zero
 
     # Eval reward appears every ~20 train steps inside one of the per-step tables.
     # Align each eval value to the training step it was logged in by counting
     # how many `task_reward/avg` markers precede the eval's position in the file.
-    train_positions = [m.start() for m in re.finditer(r'(?:ppo_actor/)?task_reward/avg', content)]
+    train_positions = [m.start() for m in re.finditer(r'task_reward/avg', content)]
     eval_rewards, eval_steps = [], []
     for em in re.finditer(r'eval-rollout/reward\s*│\s*([\d.e+\-]+)', content):
         step = sum(1 for tp in train_positions if tp <= em.start())
@@ -120,7 +97,6 @@ def parse_log(log_file):
         'steps': list(range(1, len(rewards) + 1)),
         'eval_rewards': eval_rewards,
         'eval_steps': eval_steps,
-        'final_reward': final_reward,
     }
 
 data = {}
@@ -136,7 +112,7 @@ for exp_name, (algo, eta) in EXPERIMENTS.items():
         print(f"Missing: {exp_name}")
 
 # ============================================================
-# Plot 1: Reward curves per algorithm (4 subplots)
+# Plot 1: Reward curves per algorithm (3 subplots)
 # ============================================================
 fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
 fig.suptitle('Reward Curves by Algorithm (GRPO vs CISPO vs SAPO vs M2PO)', fontsize=14, fontweight='bold')
@@ -254,7 +230,7 @@ print(f"Saved: {path_eval_eta}")
 plt.close()
 
 # ============================================================
-# Plot 3: Final reward heatmap (4x3 grid)
+# Plot 3: Final reward heatmap (3x3 grid)
 # ============================================================
 fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -266,7 +242,7 @@ for i, algo in enumerate(['grpo', 'cispo', 'sapo', 'm2po']):
     for j, eta in enumerate([0, 2, 4]):
         exp = f"{algo}_eta{eta}"
         if exp in data and data[exp]['rewards']:
-            matrix[i, j] = data[exp].get('final_reward', data[exp]['rewards'][-1])
+            matrix[i, j] = data[exp]['rewards'][-1]
 
 im = ax.imshow(matrix, cmap='RdYlGn', vmin=0.7, vmax=0.95)
 ax.set_xticks(range(3))
@@ -302,7 +278,7 @@ for algo in ['grpo', 'cispo', 'sapo', 'm2po']:
     for eta in [0, 2, 4]:
         exp = f"{algo}_eta{eta}"
         if exp in data and data[exp]['rewards']:
-            rewards.append(data[exp].get('final_reward', data[exp]['rewards'][-1]))
+            rewards.append(data[exp]['rewards'][-1])
             valid_etas.append(eta)
     if rewards:
         ax.plot(valid_etas, rewards,
