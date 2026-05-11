@@ -34,6 +34,7 @@ from areal.utils.functional import (
     ppo_actor_loss_fn,
     reward_overlong_penalty,
     sapo_loss_fn,
+    cispo_loss_fn,
 )
 from areal.utils.perf_tracer import trace_perf
 
@@ -355,6 +356,8 @@ class PPOActor:
                         importance_sampling_level=self.config.importance_sampling_level,
                         current_version=current_version,
                         prox_logp_method=self.config.prox_logp_method,
+                        use_cispo_loss=self.config.use_cispo_loss,
+                        cispo_epsilon_high=self.config.cispo_epsilon_high,
                         use_sapo_loss=self.config.use_sapo_loss,
                         sapo_tau_pos=self.config.sapo_tau_pos,
                         sapo_tau_neg=self.config.sapo_tau_neg,
@@ -420,6 +423,8 @@ def grpo_loss_fn(
     use_sapo_loss: bool = False,
     sapo_tau_pos: float = 1.0,
     sapo_tau_neg: float = 1.05,
+    use_cispo_loss: bool = False,
+    cispo_epsilon_high: float = 1.2,
     use_decoupled_loss: bool = False,
     vocab_min_logits: torch.Tensor | None = None,
     vocab_max_logits: torch.Tensor | None = None,
@@ -447,8 +452,16 @@ def grpo_loss_fn(
     if m2_threshold is not None:
         loss_mask = _apply_m2po_masking(old_logp, prox_logp, loss_mask, m2_threshold)
 
-    # Use SAPO or PPO loss
-    if use_sapo_loss:
+    # Use CISPO, SAPO, or PPO loss
+    if use_cispo_loss:
+        loss, stat = cispo_loss_fn(
+            logprobs=logprobs,
+            proximal_logprobs=prox_logp,
+            advantages=advantages,
+            epsilon_high=cispo_epsilon_high,
+            loss_mask=loss_mask,
+        )
+    elif use_sapo_loss:
         if use_decoupled_loss:
             raise ValueError(
                 "SAPO is not compatible with `use_decoupled_loss=True`. "

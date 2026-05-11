@@ -1469,6 +1469,17 @@ class PPOActorConfig(TrainEngineConfig):
         metadata={"help": "SAPO temperature for negative advantages"},
     )
 
+
+    # CISPO (Clipped IS-weight Policy Optimization) - MiniMax-M1
+    use_cispo_loss: bool = field(
+        default=False,
+        metadata={"help": "Use CISPO loss (clipped importance sampling weight, detached)"},
+    )
+    cispo_epsilon_high: float = field(
+        default=1.2,
+        metadata={"help": "CISPO upper clamp for importance sampling weight"},
+    )
+
     # Asynchronous RL
     recompute_logprob: bool = field(
         default=False,
